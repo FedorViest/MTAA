@@ -74,6 +74,17 @@ topvia = ""
 registrar = {}
 
 
+def write_to_file(prompt, fromm, to, tag):
+    time_now = time.strftime("%d %b %Y %H:%M:%S ", time.localtime())
+    with open("log.txt", "a") as file:
+        if prompt == "Call ended":
+            file.write(prompt + " " + str(time_now) + " " + tag + " " + "\n\tby: " + str(fromm) + "\n\n")
+        else:
+            file.write(prompt + " " + str(time_now) + " " + tag + " " + "\n\tto: " + str(to) + " from:" + fromm + "\n")
+        file.close()
+    return
+
+
 def change_message(change_str):
     return "SIP/2.0 " + change_str
 
@@ -176,23 +187,29 @@ class UDPHandler(socketserver.BaseRequestHandler):
 
     def getDestination(self):
         destination = ""
+        destination_str = ""
         for line in self.data:
             if rx_to.search(line) or rx_cto.search(line):
                 md = rx_uri.search(line)
                 if md:
                     destination = "%s@%s" % (md.group(1), md.group(2))
+                    destination_str = "%s@%s" % (md.group(1).decode(), md.group(2).decode())
                 break
-        return destination
+        return destination, destination_str
 
     def getOrigin(self):
         origin = ""
+        origin_str = ""
         for line in self.data:
+            if isinstance(line, str):
+                line = bytes(line, "utf-8")
             if rx_from.search(line) or rx_cfrom.search(line):
                 md = rx_uri.search(line)
                 if md:
                     origin = "%s@%s" % (md.group(1), md.group(2))
+                    origin_str = "%s@%s" % (md.group(1).decode(), md.group(2).decode())
                 break
-        return origin
+        return origin, origin_str
 
     def sendResponse(self, code):
         request_uri = "SIP/2.0 " + code
@@ -293,11 +310,11 @@ class UDPHandler(socketserver.BaseRequestHandler):
         logging.debug("-----------------")
         logging.debug(" INVITE received ")
         logging.debug("-----------------")
-        origin = self.getOrigin()
+        origin, origin_str = self.getOrigin()
         if len(origin) == 0 or not origin in registrar:
             self.sendResponse("400 Bad Request")
             return
-        destination = self.getDestination()
+        destination, destination_str = self.getDestination()
         if len(destination) > 0:
             logging.info("destination %s" % destination)
             if destination in registrar and self.checkValidity(destination):
@@ -314,6 +331,8 @@ class UDPHandler(socketserver.BaseRequestHandler):
                 showtime()
                 logging.info("<<< %s" % data[0])
                 logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
+                write_to_file("Call started", origin_str, destination_str,
+                              text[text.find(b"Call-ID:"): text.find(b"Call-ID:") + 19].decode())
             else:
                 self.sendResponse("480 Temporarily Unavailable")
         else:
@@ -324,7 +343,7 @@ class UDPHandler(socketserver.BaseRequestHandler):
         logging.debug("--------------")
         logging.debug(" ACK received ")
         logging.debug("--------------")
-        destination = self.getDestination()
+        destination, destination_str = self.getDestination()
         if len(destination) > 0:
             logging.info("destination %s" % destination)
             if destination in registrar:
@@ -347,11 +366,11 @@ class UDPHandler(socketserver.BaseRequestHandler):
         logging.debug("----------------------")
         logging.debug(" NonInvite received   ")
         logging.debug("----------------------")
-        origin = self.getOrigin()
+        origin, origin_str = self.getOrigin()
         if len(origin) == 0 or not origin in registrar:
             self.sendResponse("400 Bad Request")
             return
-        destination = self.getDestination()
+        destination, destination_str = self.getDestination()
         if len(destination) > 0:
             logging.info("destination %s" % destination)
             if destination in registrar and self.checkValidity(destination):
@@ -368,13 +387,16 @@ class UDPHandler(socketserver.BaseRequestHandler):
                 showtime()
                 logging.info("<<< %s" % data[0])
                 logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
+                if rx_bye.search(text):
+                    write_to_file("Call ended", origin_str, destination_str,
+                                  text[text.find(b"Call-ID:"): text.find(b"Call-ID:") + 19].decode())
             else:
                 self.sendResponse("406 Not Acceptable")
         else:
             self.sendResponse("500 Server Internal Error")
 
     def processCode(self):
-        origin = self.getOrigin()
+        origin, origin_str = self.getOrigin()
         if len(origin) > 0:
             logging.debug("origin %s" % origin)
             if origin in registrar:
