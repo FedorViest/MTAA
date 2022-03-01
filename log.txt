@@ -2,4 +2,3 @@ Call started 01 Mar 2022 16:53:46  Call-ID: xKuUnqWTrX
 	to: 100@192.168.0.115 from:101@192.168.0.115
 Call ended 01 Mar 2022 16:53:53  Call-ID: xKuUnqWTrX 
 	by: 101@192.168.0.115
-

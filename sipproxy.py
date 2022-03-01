@@ -67,6 +67,8 @@ rx_expires = re.compile(b"^Expires: (.*)$")
 rx_busyhere = re.compile(b"Busy Here|here")
 rx_trying = re.compile(b"Trying")
 rx_calling = re.compile(b"Ringing")
+rx_terminated = re.compile(b"Request terminated")
+rx_decline = re.compile(b"Decline")
 
 # global dictionnary
 recordroute = ""
@@ -77,7 +79,7 @@ registrar = {}
 def write_to_file(prompt, fromm, to, tag):
     time_now = time.strftime("%d %b %Y %H:%M:%S ", time.localtime())
     with open("log.txt", "a") as file:
-        if prompt == "Call ended":
+        if prompt == "Call ended" or prompt == "Call terminated" or prompt == "Call declined":
             file.write(prompt + " " + str(time_now) + " " + tag + " " + "\n\tby: " + str(fromm) + "\n\n")
         else:
             file.write(prompt + " " + str(time_now) + " " + tag + " " + "\n\tto: " + str(to) + " from:" + fromm + "\n")
@@ -397,6 +399,7 @@ class UDPHandler(socketserver.BaseRequestHandler):
 
     def processCode(self):
         origin, origin_str = self.getOrigin()
+        destination, destination_str = self.getDestination()
         if len(origin) > 0:
             logging.debug("origin %s" % origin)
             if origin in registrar:
@@ -406,6 +409,12 @@ class UDPHandler(socketserver.BaseRequestHandler):
                 text = b"\r\n".join(data)
                 socket.sendto(text, claddr)
                 showtime()
+                if rx_decline.search(text):
+                    write_to_file("Call declined", destination_str, None,
+                                  text[text.find(b"Call-ID:"): text.find(b"Call-ID:") + 19].decode())
+                elif rx_terminated.search(text):
+                    write_to_file("Call terminated", origin_str, None,
+                                  text[text.find(b"Call-ID:"): text.find(b"Call-ID:") + 19].decode())
                 logging.info("<<< %s" % data[0])
                 logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
 
